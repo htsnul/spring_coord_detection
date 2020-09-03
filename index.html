@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<input type="file">
+<div style="position: relative; border: 1px;">
+</div>
+<script>
+  let pipeCount = 6 * 12;
+  let audioData;
+  let t = 0;
+  class Pipe {
+    constructor(parentElm, scale) {
+      this.y = 0;
+      this.v = 0;
+      const hz = Math.pow(2, scale / 12);
+      this.k = Math.pow(hz, 2) * 0.0001;
+      this.elm = document.createElement("div");
+      this.elm.style.position = "absolute";
+      this.elm.style.left = `${8 * scale}px`;
+      this.elm.style.width = "4px";
+      this.elm.style.height = "4px";
+      this.elm.style.backgroundColor = "black";
+      parentElm.appendChild(this.elm);
+    }
+    update(audioData, index, count) {
+      let ymax = 0;
+      for (let i = 0; i < count; ++i) {
+        const audioSample = audioData[index + i];
+        this.v += audioSample - this.k * this.y - 0.001 * this.v;
+        this.y += this.v;
+        ymax = Math.max(Math.abs(this.y));
+      }
+      this.elm.style.top = `${0.1 * ymax}px`;
+    }
+  };
+  let pipes = [];
+  const divElm = document.querySelector("div");
+  for (let j = 0; j < pipeCount; ++j) {
+    pipes[j] = new Pipe(divElm, j);
+  }
+  function update() {
+    requestAnimationFrame(update);
+    if (!audioData) {
+      return;
+    }
+    const step = 800;
+    const count = Math.min(step, audioData.length - t);
+    for (let j = 0; j < pipeCount; ++j) {
+      pipes[j].update(audioData, t, count);
+    }
+    t += step;
+  }
+  onload = () => {
+    requestAnimationFrame(update);
+    document.querySelector("input").onchange = async (e) => {
+      const audioCtx = new AudioContext();
+      const audioBufferSourceNode = audioCtx.createBufferSource();
+      const file = e.target.files[0];
+      const fileReader = new FileReader();
+      fileReader.readAsArrayBuffer(file);
+      await new Promise((resolve) => fileReader.onload = (e) => resolve());
+      audioBufferSourceNode.buffer = await new Promise((resolve) => {
+        audioCtx.decodeAudioData(fileReader.result, (buffer) => {
+          resolve(buffer);
+        });
+      });
+      audioBufferSourceNode.connect(audioCtx.destination);
+      t = 0;
+      audioBufferSourceNode.start(0);
+      const audioBuffer = audioBufferSourceNode.buffer;
+      console.log(audioBuffer);
+      audioData = audioBuffer.getChannelData(0);
+    }
+  };
+</script>
