@@ -3,50 +3,58 @@
 <div style="position: relative; border: 1px;">
 </div>
 <script>
-  let pipeCount = 6 * 12;
+  let oscillatorCount = 96;
+  const sampleRate = 48000;
+  let audioBuffer;
   let audioData;
   let t = 0;
-  class Pipe {
+  class Oscillator {
     constructor(parentElm, scale) {
       this.y = 0;
       this.v = 0;
-      const hz = Math.pow(2, scale / 12);
-      this.k = Math.pow(hz, 2) * 0.0001;
+      const hz = Math.pow(2, (scale / 12) - 3) * 440 / sampleRate;
+      this.k = 0.03;
+      this.m = this.k / Math.pow(hz, 2);
+      this.dumpRate = 1 / 8;
       this.elm = document.createElement("div");
+      const noteChar = "A BC D EF G "[(240 + scale) % 12];
       this.elm.style.position = "absolute";
+      this.elm.style.fontSize = "8px";
       this.elm.style.left = `${8 * scale}px`;
-      this.elm.style.width = "4px";
-      this.elm.style.height = "4px";
-      this.elm.style.backgroundColor = "black";
+      this.elm.style.width = "7px";
+      this.elm.style.height = "16px";
+      this.elm.style.backgroundColor = (noteChar === " ") ? "#444" : "#fff";
+      this.elm.style.color = "#ccc";
+      this.elm.style.border = "1px solid #888";
       parentElm.appendChild(this.elm);
     }
     update(audioData, index, count) {
       let ymax = 0;
       for (let i = 0; i < count; ++i) {
         const audioSample = audioData[index + i];
-        this.v += audioSample - this.k * this.y - 0.001 * this.v;
+        const a = (audioSample - this.y) / 4 - this.k * this.y - this.dumpRate * this.v;
+        this.v += a / this.m;
         this.y += this.v;
-        ymax = Math.max(Math.abs(this.y));
+        ymax = Math.max(ymax, Math.abs(this.y));
       }
-      this.elm.style.top = `${0.1 * ymax}px`;
+      this.elm.style.height = `${16 + 20 * ymax}px`;
     }
   };
-  let pipes = [];
+  let oscillators = [];
   const divElm = document.querySelector("div");
-  for (let j = 0; j < pipeCount; ++j) {
-    pipes[j] = new Pipe(divElm, j);
+  for (let j = 0; j < oscillatorCount; ++j) {
+    oscillators[j] = new Oscillator(divElm, j);
   }
   function update() {
     requestAnimationFrame(update);
     if (!audioData) {
       return;
     }
-    const step = 800;
-    const count = Math.min(step, audioData.length - t);
-    for (let j = 0; j < pipeCount; ++j) {
-      pipes[j].update(audioData, t, count);
+    const count = Math.min(48000 / 60, audioData.length - t);
+    for (let j = 0; j < oscillatorCount; ++j) {
+      oscillators[j].update(audioData, t, count);
     }
-    t += step;
+    t += count;
   }
   onload = () => {
     requestAnimationFrame(update);
@@ -65,7 +73,7 @@
       audioBufferSourceNode.connect(audioCtx.destination);
       t = 0;
       audioBufferSourceNode.start(0);
-      const audioBuffer = audioBufferSourceNode.buffer;
+      audioBuffer = audioBufferSourceNode.buffer;
       console.log(audioBuffer);
       audioData = audioBuffer.getChannelData(0);
     }
