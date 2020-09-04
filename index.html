@@ -3,19 +3,21 @@
 <div style="position: relative; border: 1px;">
 </div>
 <script>
-  let oscillatorCount = 96;
-  const sampleRate = 48000;
+  let audioCtx;
+  let audioBufferSourceNode;
+  let oscillatorCount = 80;
   let audioBuffer;
   let audioData;
   let t = 0;
   class Oscillator {
-    constructor(parentElm, scale) {
+    constructor(parentElm, sampleRate, scale) {
       this.y = 0;
       this.v = 0;
-      const hz = Math.pow(2, (scale / 12) - 3) * 440 / sampleRate;
-      this.k = 0.03;
-      this.m = this.k / Math.pow(hz, 2);
-      this.dumpRate = 1 / 8;
+      const f = Math.pow(2, (scale / 12) - 3) * 440 / sampleRate;
+      const omega = 2 * Math.PI * f;
+      this.k = 0.5;
+      this.m = this.k / Math.pow(omega, 2);
+      this.b = 0.5;
       this.elm = document.createElement("div");
       const noteChar = "A BC D EF G "[(240 + scale) % 12];
       this.elm.style.position = "absolute";
@@ -31,51 +33,59 @@
     update(audioData, index, count) {
       let ymax = 0;
       for (let i = 0; i < count; ++i) {
-        const audioSample = audioData[index + i];
-        const a = (audioSample - this.y) / 4 - this.k * this.y - this.dumpRate * this.v;
+        const sample = audioData[index + i];
+        const a = 0.5 * sample - this.k * this.y - this.b * this.v;
         this.v += a / this.m;
         this.y += this.v;
         ymax = Math.max(ymax, Math.abs(this.y));
       }
-      this.elm.style.height = `${16 + 20 * ymax}px`;
+      this.elm.style.height = `${16 + 40 * ymax}px`;
     }
   };
   let oscillators = [];
-  const divElm = document.querySelector("div");
-  for (let j = 0; j < oscillatorCount; ++j) {
-    oscillators[j] = new Oscillator(divElm, j);
-  }
   function update() {
     requestAnimationFrame(update);
     if (!audioData) {
       return;
     }
-    const count = Math.min(48000 / 60, audioData.length - t);
+    const count = Math.min(audioBuffer.sampleRate / 60, audioData.length - t);
     for (let j = 0; j < oscillatorCount; ++j) {
       oscillators[j].update(audioData, t, count);
     }
     t += count;
   }
+  async function onFileChange(e) {
+    if (!audioCtx) {
+      audioCtx = new AudioContext();
+    }
+    if (audioBufferSourceNode) {
+      audioBufferSourceNode.stop();
+    }
+    audioBufferSourceNode = audioCtx.createBufferSource();
+    const file = e.target.files[0];
+    const fileReader = new FileReader();
+    fileReader.readAsArrayBuffer(file);
+    await new Promise((resolve) => fileReader.onload = (e) => resolve());
+    audioBufferSourceNode.buffer = await new Promise((resolve) => {
+      audioCtx.decodeAudioData(fileReader.result, (buffer) => {
+        resolve(buffer);
+      });
+    });
+    audioBufferSourceNode.connect(audioCtx.destination);
+    audioBuffer = audioBufferSourceNode.buffer;
+    console.log(audioBuffer);
+    audioData = audioBuffer.getChannelData(0);
+    const divElm = document.querySelector("div");
+    divElm.innerHTML = "";
+    oscillators = [];
+    for (let i = 0; i < oscillatorCount; ++i) {
+      oscillators.push(new Oscillator(divElm, audioBuffer.sampleRate, i));
+    }
+    audioBufferSourceNode.start(0);
+    t = 0;
+  }
   onload = () => {
     requestAnimationFrame(update);
-    document.querySelector("input").onchange = async (e) => {
-      const audioCtx = new AudioContext();
-      const audioBufferSourceNode = audioCtx.createBufferSource();
-      const file = e.target.files[0];
-      const fileReader = new FileReader();
-      fileReader.readAsArrayBuffer(file);
-      await new Promise((resolve) => fileReader.onload = (e) => resolve());
-      audioBufferSourceNode.buffer = await new Promise((resolve) => {
-        audioCtx.decodeAudioData(fileReader.result, (buffer) => {
-          resolve(buffer);
-        });
-      });
-      audioBufferSourceNode.connect(audioCtx.destination);
-      t = 0;
-      audioBufferSourceNode.start(0);
-      audioBuffer = audioBufferSourceNode.buffer;
-      console.log(audioBuffer);
-      audioData = audioBuffer.getChannelData(0);
-    }
+    document.querySelector("input").onchange = onFileChange;
   };
 </script>
