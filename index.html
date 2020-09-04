@@ -6,6 +6,7 @@
   let audioCtx;
   let audioBufferSourceNode;
   let oscillatorCount = 80;
+  let oscillators = [];
   let audioBuffer;
   let audioData;
   let t = 0;
@@ -42,7 +43,6 @@
       this.elm.style.height = `${16 + 40 * ymax}px`;
     }
   };
-  let oscillators = [];
   function update() {
     requestAnimationFrame(update);
     if (!audioData) {
