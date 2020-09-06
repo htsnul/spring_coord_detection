@@ -1,16 +1,18 @@
 <!DOCTYPE html>
-<input type="file">
+<input type="file" class="file">
+<label><input type="checkbox" class="reconstruct">Reconstruct</label>
 <div style="position: relative; border: 1px;">
 </div>
 <script>
   let audioCtx;
   let audioBufferSourceNode;
-  let oscillatorCount = 80;
-  let oscillators = [];
+  let resonatorCount = 80;
+  let resonators = [];
   let audioBuffer;
   let audioData;
+  let isAudioStarted = false;
   let t = 0;
-  class Oscillator {
+  class Resonator {
     constructor(parentElm, sampleRate, scale) {
       this.y = 0;
       this.v = 0;
@@ -30,17 +32,39 @@
       this.elm.style.color = "#ccc";
       this.elm.style.border = "1px solid #888";
       parentElm.appendChild(this.elm);
+      if (document.querySelector(".reconstruct").checked) {
+        this.gainNode = audioCtx.createGain();
+        this.gainNode.value = 0;
+        this.gainNode.connect(audioCtx.destination);
+        this.oscillatorNode = audioCtx.createOscillator();
+        this.oscillatorNode.frequency.value = Math.pow(2, (scale / 12) - 3) * 440;
+        this.oscillatorNode.connect(this.gainNode);
+        this.oscillatorNode.start();
+      }
+    }
+    destructor() {
+      if (this.gainNode) {
+        this.oscillatorNode.disconnect();
+        this.gainNode.disconnect();
+      }
+      this.elm.parentNode.removeChild(this.elm);
     }
     update(audioData, index, count) {
       let ymax = 0;
+      let fSum = 0;
       for (let i = 0; i < count; ++i) {
         const sample = audioData[index + i];
-        const a = 0.5 * sample - this.k * this.y - this.b * this.v;
-        this.v += a / this.m;
+        const f = this.k * (sample - this.y) - this.b * this.v;
+        const a = f / this.m;
+        this.v += a;
         this.y += this.v;
-        ymax = Math.max(ymax, Math.abs(this.y));
+        fSum += Math.abs(f);
       }
-      this.elm.style.height = `${16 + 40 * ymax}px`;
+      const fAvg = fSum / count;
+      this.elm.style.height = `${16 + 128 * fAvg}px`;
+      if (this.gainNode) {
+        this.gainNode.gain.value = fAvg / 4;
+      }
     }
   };
   function update() {
@@ -49,8 +73,8 @@
       return;
     }
     const count = Math.min(audioBuffer.sampleRate / 60, audioData.length - t);
-    for (let j = 0; j < oscillatorCount; ++j) {
-      oscillators[j].update(audioData, t, count);
+    for (let resonator of resonators) {
+      resonator.update(audioData, t, count);
     }
     t += count;
   }
@@ -58,8 +82,12 @@
     if (!audioCtx) {
       audioCtx = new AudioContext();
     }
-    if (audioBufferSourceNode) {
+    if (audioBufferSourceNode && isAudioStarted) {
       audioBufferSourceNode.stop();
+      isAudioStarted = false;
+    }
+    while (resonators.length > 0) {
+      resonators.pop().destructor();
     }
     audioBufferSourceNode = audioCtx.createBufferSource();
     const file = e.target.files[0];
@@ -77,15 +105,17 @@
     audioData = audioBuffer.getChannelData(0);
     const divElm = document.querySelector("div");
     divElm.innerHTML = "";
-    oscillators = [];
-    for (let i = 0; i < oscillatorCount; ++i) {
-      oscillators.push(new Oscillator(divElm, audioBuffer.sampleRate, i));
+    for (let i = 0; i < resonatorCount; ++i) {
+      resonators.push(new Resonator(divElm, audioBuffer.sampleRate, i));
     }
-    audioBufferSourceNode.start(0);
+    if (!document.querySelector(".reconstruct").checked) {
+      audioBufferSourceNode.start(0);
+      isAudioStarted = true;
+    }
     t = 0;
   }
   onload = () => {
     requestAnimationFrame(update);
-    document.querySelector("input").onchange = onFileChange;
+    document.querySelector(".file").onchange = onFileChange;
   };
 </script>
