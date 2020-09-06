@@ -50,7 +50,6 @@
       this.elm.parentNode.removeChild(this.elm);
     }
     update(audioData, index, count) {
-      let ymax = 0;
       let fSum = 0;
       for (let i = 0; i < count; ++i) {
         const sample = audioData[index + i];
