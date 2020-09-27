@@ -50,19 +50,18 @@
       this.elm.parentNode.removeChild(this.elm);
     }
     update(audioData, index, count) {
-      let fSum = 0;
+      let yMax = 0;
       for (let i = 0; i < count; ++i) {
         const sample = audioData[index + i];
         const f = this.k * (sample - this.y) - this.b * this.v;
         const a = f / this.m;
         this.v += a;
         this.y += this.v;
-        fSum += Math.abs(f);
+        yMax = Math.max(yMax, this.y);
       }
-      const fAvg = fSum / count;
-      this.elm.style.height = `${16 + 128 * fAvg}px`;
+      this.elm.style.height = `${16 + 32 * yMax}px`;
       if (this.gainNode) {
-        this.gainNode.gain.value = fAvg / 4;
+        this.gainNode.gain.value = yMax / 16;
       }
     }
   };
